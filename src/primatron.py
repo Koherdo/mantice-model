@@ -2,7 +2,7 @@ import numpy as np
 from scipy.spatial import KDTree
 from typing import List, Tuple, Dict
 import networkx as nx
-from .quaternions import Quaternion, create_rotation_quaternion
+from quaternions import Quaternion, create_rotation_quaternion
 
 
 class Primaton:

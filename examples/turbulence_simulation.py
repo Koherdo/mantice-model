@@ -5,13 +5,16 @@ Example: Turbulence simulation using Mantice model
 
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+# Ajouter le chemin source
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 import numpy as np
-from src.primatron import Primaton
-from src.synchronization import QuaternionicSynchronization
-from src.mantice_detection import ManticeDetector
-from src.visualization import ManticeVisualizer
+from primatron import Primaton
+from synchronization import QuaternionicSynchronization
+from mantice_detection import ManticeDetector
+from visualization import ManticeVisualizer
+
 
 def run_turbulence_simulation():
     """Run a complete turbulence simulation"""
@@ -62,6 +65,7 @@ def run_turbulence_simulation():
     
     print("Simulation completed successfully!")
     return synchronization, detector
+
 
 if __name__ == "__main__":
     run_turbulence_simulation()

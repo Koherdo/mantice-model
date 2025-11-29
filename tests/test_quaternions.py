@@ -2,9 +2,12 @@ import pytest
 import numpy as np
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from src.quaternions import Quaternion, quaternion_exp, quaternion_sin
+# Ajouter le chemin source au Python path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+
+from quaternions import Quaternion, quaternion_exp, quaternion_sin
+
 
 class TestQuaternions:
     def test_quaternion_creation(self):

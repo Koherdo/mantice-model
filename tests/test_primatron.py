@@ -2,9 +2,12 @@ import pytest
 import numpy as np
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from src.primatron import Primaton
+# Ajouter le chemin source au Python path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+
+from primatron import Primaton
+
 
 class TestPrimaton:
     def test_primatron_creation(self):

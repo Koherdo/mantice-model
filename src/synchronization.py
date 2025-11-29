@@ -1,7 +1,7 @@
 import numpy as np
 from typing import List, Callable
-from .quaternions import Quaternion, quaternion_sin
-from .primatron import Primaton
+from quaternions import Quaternion, quaternion_sin
+from primatron import Primaton
 
 
 class QuaternionicSynchronization:
