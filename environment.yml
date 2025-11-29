@@ -1,0 +1,21 @@
+name: mantice-model
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - numpy
+  - scipy
+  - matplotlib
+  - pandas
+  - scikit-learn
+  - networkx
+  - numba
+  - jupyter
+  - plotly
+  - openmpi
+  - mpi4py
+  - pytest
+  - tqdm
+  - h5py
+  - pyyaml

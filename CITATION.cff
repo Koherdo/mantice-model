@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: "Ndeffo"
+    given-names: "Marcel"
+    email: "marcel.ndeffo@tesselite.com"
+    affiliation: "TESSELITE, Inc."
+  - family-names: "Koho"
+    given-names: "Hervé"
+    email: "herve.koho@tesselite.com"
+    affiliation: "TESSELITE, Inc."
+title: "Mantice Model: Superdiffusive Transport via Self-Organized Quaternionic Mantices"
+version: 1.0.0
+doi: 10.5281/zenodo.XXXXXX
+date-released: 2025-11-29
+url: "https://github.com/tesselite/mantice-model"
