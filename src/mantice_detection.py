@@ -1,8 +1,10 @@
 import numpy as np
 import networkx as nx
 from typing import List, Set, Tuple
-from primatron import Primaton
-from synchronization import QuaternionicSynchronization
+
+from src.quaternions import Quaternion
+from .primatron import Primaton
+from .synchronization import QuaternionicSynchronization
 from collections import deque
 
 

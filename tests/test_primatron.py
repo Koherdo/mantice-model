@@ -6,7 +6,7 @@ import os
 # Ajouter le chemin source au Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from primatron import Primaton
+from src.primatron import Primaton
 
 
 class TestPrimaton:

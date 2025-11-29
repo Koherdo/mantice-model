@@ -6,7 +6,7 @@ import os
 # Ajouter le chemin source au Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from quaternions import Quaternion, quaternion_exp, quaternion_sin
+from src.quaternions import Quaternion, quaternion_exp, quaternion_sin
 
 
 class TestQuaternions:

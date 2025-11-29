@@ -69,6 +69,12 @@ def run_validation_tests():
     try:
         import numpy as np
         import matplotlib.pyplot as plt
+        
+        # Test avec le chemin correct
+        import sys
+        import os
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+        
         from src.quaternions import Quaternion
         from src.primatron import Primaton
         
