@@ -1,6 +1,9 @@
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+# Obtenir le chemin absolu du projet
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(project_root)
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -22,12 +25,20 @@ def generate_energy_spectrum_figure():
     # LES spectrum (larger error)
     E_les = E_dns * (1 + 0.045 * np.random.normal(0, 1, len(k_values)))
     
-    # Create visualization
+    # Create visualization avec chemin absolu
     visualizer = ManticeVisualizer()
+    
+    # Chemin absolu pour la sauvegarde
+    save_dir = os.path.join(project_root, 'results', 'figures')
+    os.makedirs(save_dir, exist_ok=True)
+    save_path = os.path.join(save_dir, 'energy_spectrum.pdf')
+    
     visualizer.plot_energy_spectrum(
         k_values, E_mantice, E_les, E_dns,
-        save_path='../results/figures/energy_spectrum.pdf'
+        save_path=save_path
     )
+    
+    print(f"Figure sauvegardée dans: {save_path}")
     
     # Generate structure function data for Table VI
     print("\nTable VI: Structure Function Exponents")

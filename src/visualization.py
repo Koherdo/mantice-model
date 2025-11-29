@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from typing import List, Set
+from typing import List, Set, Dict, Any
 import sys
 import os
 
@@ -14,24 +14,21 @@ except ImportError:
     PLOTLY_AVAILABLE = False
     print("Plotly not available, 3D visualization disabled")
 
-from .primatron import Primaton
-from .quaternions import Quaternion
-
-
 class ManticeVisualizer:
     """Visualization tools for Mantice model."""
     
     def __init__(self):
         self.colors = plt.cm.Set3(np.linspace(0, 1, 12))
     
-    def plot_phase_transition(self, sigma_values: list, order_parameters: list, 
+    def plot_phase_transition(self, sigma_values: np.ndarray, order_parameters: list, 
                             critical_sigma: float, save_path: str = None):
         """Plot phase transition with finite-size scaling"""
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
         
         # Main phase transition plot
-        for i, (sigma, R) in enumerate(zip(sigma_values, order_parameters)):
-            ax1.plot(sigma, R, 'o-', label=f'N={100*(i+1)}', color=self.colors[i])
+        system_sizes = [100, 500, 1000, 5000, 10000]
+        for i, R_values in enumerate(order_parameters):
+            ax1.plot(sigma_values, R_values, 'o-', label=f'N={system_sizes[i]}', color=self.colors[i], markersize=4)
         
         ax1.axvline(critical_sigma, color='red', linestyle='--', 
                    label=f'$\\sigma_c = {critical_sigma:.3f}$')
@@ -42,6 +39,8 @@ class ManticeVisualizer:
         ax1.grid(True, alpha=0.3)
         
         # Finite-size scaling inset
+        ax2.text(0.5, 0.5, 'Finite-Size Scaling\n(Collapse plot)', 
+                 ha='center', va='center', transform=ax2.transAxes, fontsize=12)
         ax2.set_xlabel('$(\\sigma - \\sigma_c)N^{1/\\nu}$')
         ax2.set_ylabel('$R N^{\\beta/\\nu}$')
         ax2.set_title('Finite-Size Scaling Collapse')
@@ -49,10 +48,43 @@ class ManticeVisualizer:
         
         plt.tight_layout()
         if save_path:
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
         plt.show()
     
-    # ... (le reste du code reste identique mais avec les imports corrigés)
+    def plot_phase_transition_comprehensive(self, results: Dict, critical_sigma: float, save_path: str = None):
+        """Plot comprehensive phase transition with multiple system sizes"""
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+        
+        # Main phase transition plot
+        for i, (N, data) in enumerate(results.items()):
+            sigma = data['sigma']
+            R = data['R']
+            susceptibility = data['susceptibility']
+            
+            ax1.plot(sigma, R, 'o-', label=f'N={N}', color=self.colors[i], markersize=4)
+            ax2.plot(sigma, susceptibility, 's-', label=f'N={N}', color=self.colors[i], markersize=4)
+        
+        ax1.axvline(critical_sigma, color='red', linestyle='--', 
+                   label=f'$\\sigma_c = {critical_sigma:.3f}$')
+        ax1.set_xlabel('Disorder Strength ($\\sigma$)')
+        ax1.set_ylabel('Order Parameter ($R$)')
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+        
+        ax2.set_xlabel('Disorder Strength ($\\sigma$)')
+        ax2.set_ylabel('Susceptibility ($\\chi$)')
+        ax2.legend()
+        ax2.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        
+        if save_path:
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        
+        plt.show()
+
     def plot_transport_scaling(self, distances: list, mantice_times: list, 
                              diffusive_times: list, save_path: str = None):
         """Plot transport scaling comparison"""
@@ -78,6 +110,7 @@ class ManticeVisualizer:
         
         plt.tight_layout()
         if save_path:
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
         plt.show()
 
@@ -103,9 +136,9 @@ class ManticeVisualizer:
         ax1.grid(True, alpha=0.3)
         
         # Compensated spectrum
-        ax2.loglog(k_values, E_dns * k_values**(5/3), 'k-', label='DNS', linewidth=2)
-        ax2.loglog(k_values, E_mantice * k_values**(5/3), 'b-', label='Mantice', linewidth=2)
-        ax2.loglog(k_values, E_les * k_values**(5/3), 'r-', label='LES', linewidth=2)
+        ax2.loglog(k_values, E_dns * np.array(k_values)**(5/3), 'k-', label='DNS', linewidth=2)
+        ax2.loglog(k_values, E_mantice * np.array(k_values)**(5/3), 'b-', label='Mantice', linewidth=2)
+        ax2.loglog(k_values, E_les * np.array(k_values)**(5/3), 'r-', label='LES', linewidth=2)
         
         ax2.set_xlabel('Wavenumber $k$')
         ax2.set_ylabel('$E(k) k^{5/3}$')
@@ -115,6 +148,7 @@ class ManticeVisualizer:
         
         plt.tight_layout()
         if save_path:
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
         plt.show()
 
@@ -149,65 +183,6 @@ class ManticeVisualizer:
         
         plt.tight_layout()
         if save_path:
+            os.makedirs(os.path.dirname(save_path), exist_ok=True)
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
         plt.show()
-
-    def plot_3d_mantices(self, primaton: Primaton, mantices: List[Set[int]], 
-                        save_path: str = None):
-        """Create 3D visualization of Mantices"""
-        if not PLOTLY_AVAILABLE:
-            print("Plotly not available for 3D visualization")
-            return
-            
-        fig = go.Figure()
-        
-        positions = primaton.positions
-        
-        # Plot each Mantice with different color
-        for i, mantice in enumerate(mantices):
-            if len(mantice) < 2:
-                continue
-                
-            mantice_nodes = list(mantice)
-            x = [positions[node][0] for node in mantice_nodes]
-            y = [positions[node][1] for node in mantice_nodes]
-            z = [positions[node][2] for node in mantice_nodes]
-            
-            color = self.colors[i % len(self.colors)]
-            color_str = f'rgb({int(color[0]*255)},{int(color[1]*255)},{int(color[2]*255)})'
-            
-            fig.add_trace(go.Scatter3d(
-                x=x, y=y, z=z,
-                mode='markers',
-                marker=dict(size=8, color=color_str),
-                name=f'Mantice {i+1} (size: {len(mantice)})'
-            ))
-            
-            # Add edges within Mantice
-            for node_i in mantice_nodes:
-                for node_j in mantice_nodes:
-                    if node_i < node_j and primaton.graph.has_edge(node_i, node_j):
-                        edge_x = [positions[node_i][0], positions[node_j][0]]
-                        edge_y = [positions[node_i][1], positions[node_j][1]]
-                        edge_z = [positions[node_i][2], positions[node_j][2]]
-                        
-                        fig.add_trace(go.Scatter3d(
-                            x=edge_x, y=edge_y, z=edge_z,
-                            mode='lines',
-                            line=dict(color=color_str, width=2),
-                            showlegend=False
-                        ))
-        
-        fig.update_layout(
-            title='3D Mantice Structure Visualization',
-            scene=dict(
-                xaxis_title='X',
-                yaxis_title='Y',
-                zaxis_title='Z'
-            )
-        )
-        
-        if save_path:
-            fig.write_html(save_path)
-        
-        fig.show()

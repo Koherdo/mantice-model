@@ -1,6 +1,9 @@
 import sys
 import os
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
+# Obtenir le chemin absolu du projet
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(project_root)
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -21,12 +24,20 @@ def generate_transport_scaling_figure():
     diffusive_times = 0.15 * distances**2
     diffusive_times += np.random.normal(0, 10, len(distances))  # Add noise
     
-    # Create visualization
+    # Create visualization avec chemin absolu
     visualizer = ManticeVisualizer()
+    
+    # Chemin absolu pour la sauvegarde
+    save_dir = os.path.join(project_root, 'results', 'figures')
+    os.makedirs(save_dir, exist_ok=True)
+    save_path = os.path.join(save_dir, 'transport_scaling.pdf')
+    
     visualizer.plot_transport_scaling(
         distances, mantice_times, diffusive_times,
-        save_path='../results/figures/transport_scaling.pdf'
+        save_path=save_path
     )
+    
+    print(f"Figure sauvegardée dans: {save_path}")
     
     # Generate data for Table III
     print("\nTable III: Transport Scaling Verification")
