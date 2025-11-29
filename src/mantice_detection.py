@@ -124,7 +124,9 @@ class ManticeDetector:
 
         return list(components.values())
 
-    def _verify_spatial_connectivity(self, components: List[Set[int]]) -> List[Set[int]]:
+    def _verify_spatial_connectivity(
+        self, components: List[Set[int]]
+    ) -> List[Set[int]]:
         """Verify spatial connectivity of components."""
         mantices = []
 

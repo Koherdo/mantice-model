@@ -16,14 +16,24 @@ def main():
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # Reproduce paper
-    reproduce_parser = subparsers.add_parser("reproduce", help="Reproduce paper results")
-    reproduce_parser.add_argument("--figures", action="store_true", help="Generate figures")
-    reproduce_parser.add_argument("--tables", action="store_true", help="Generate tables")
-    reproduce_parser.add_argument("--all", action="store_true", help="Generate everything")
+    reproduce_parser = subparsers.add_parser(
+        "reproduce", help="Reproduce paper results"
+    )
+    reproduce_parser.add_argument(
+        "--figures", action="store_true", help="Generate figures"
+    )
+    reproduce_parser.add_argument(
+        "--tables", action="store_true", help="Generate tables"
+    )
+    reproduce_parser.add_argument(
+        "--all", action="store_true", help="Generate everything"
+    )
 
     # Run simulation
     sim_parser = subparsers.add_parser("simulate", help="Run simulations")
-    sim_parser.add_argument("--system", choices=["turbulence", "railway"], required=True)
+    sim_parser.add_argument(
+        "--system", choices=["turbulence", "railway"], required=True
+    )
     sim_parser.add_argument("--nodes", type=int, default=1000)
     sim_parser.add_argument("--steps", type=int, default=1000)
 
