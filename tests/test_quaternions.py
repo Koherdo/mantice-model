@@ -1,49 +1,89 @@
 import pytest
 import numpy as np
-import sys
-import os
-
-# Ajouter le chemin source au Python path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-
-from src.quaternions import Quaternion, quaternion_exp, quaternion_sin
+from src.primatron import quaternion_multiply, quaternion_conjugate, quaternion_norm
 
 
-class TestQuaternions:
-    def test_quaternion_creation(self):
-        q = Quaternion(1, 2, 3, 4)
-        assert q.w == 1
-        assert q.x == 2
-        assert q.y == 3
-        assert q.z == 4
+class TestQuaternionOperations:
+    def test_quaternion_multiply(self):
+        """Test de la multiplication de quaternions"""
+        # Quaternion unité
+        q1 = np.array([1, 0, 0, 0])
+        q2 = np.array([1, 0, 0, 0])
+        result = quaternion_multiply(q1, q2)
+        expected = np.array([1, 0, 0, 0])
+        assert np.allclose(result, expected)
 
-    def test_quaternion_norm(self):
-        q = Quaternion(1, 1, 1, 1)
-        assert abs(q.norm() - 2.0) < 1e-10
+        # Multiplication avec i
+        q1 = np.array([1, 0, 0, 0])
+        q2 = np.array([0, 1, 0, 0])
+        result = quaternion_multiply(q1, q2)
+        expected = np.array([0, 1, 0, 0])
+        assert np.allclose(result, expected)
 
-    def test_quaternion_multiplication(self):
-        q1 = Quaternion(1, 0, 0, 0)  # Identity
-        q2 = Quaternion(0, 1, 0, 0)  # i
-        q3 = q1 * q2
-        assert q3.w == 0
-        assert q3.x == 1
-        assert q3.y == 0
-        assert q3.z == 0
+        # i * i = -1
+        q1 = np.array([0, 1, 0, 0])
+        q2 = np.array([0, 1, 0, 0])
+        result = quaternion_multiply(q1, q2)
+        expected = np.array([-1, 0, 0, 0])
+        assert np.allclose(result, expected)
 
     def test_quaternion_conjugate(self):
-        q = Quaternion(1, 2, 3, 4)
-        q_conj = q.conjugate()
-        assert q_conj.w == 1
-        assert q_conj.x == -2
-        assert q_conj.y == -3
-        assert q_conj.z == -4
+        """Test du conjugué de quaternion"""
+        q = np.array([1, 2, 3, 4])
+        result = quaternion_conjugate(q)
+        expected = np.array([1, -2, -3, -4])
+        assert np.allclose(result, expected)
 
-    def test_quaternion_inverse(self):
-        q = Quaternion(1, 0, 0, 0)
-        q_inv = q.inverse()
-        assert abs(q_inv.w - 1) < 1e-10
+    def test_quaternion_norm(self):
+        """Test de la norme de quaternion"""
+        q = np.array([1, 0, 0, 0])
+        assert abs(quaternion_norm(q) - 1.0) < 1e-10
 
-    def test_quaternion_exp(self):
-        q = Quaternion(0, 0, 0, 0)  # Zero quaternion
-        q_exp = quaternion_exp(q)
-        assert abs(q_exp.w - 1) < 1e-10
+        q = np.array([0, 1, 0, 0])
+        assert abs(quaternion_norm(q) - 1.0) < 1e-10
+
+        q = np.array([1, 1, 1, 1])
+        expected_norm = np.sqrt(4)
+        assert abs(quaternion_norm(q) - expected_norm) < 1e-10
+
+    def test_quaternion_identity(self):
+        """Test de l'identité multiplicative"""
+        q = np.array([2, 3, 4, 5])
+        identity = np.array([1, 0, 0, 0])
+
+        result1 = quaternion_multiply(q, identity)
+        result2 = quaternion_multiply(identity, q)
+
+        assert np.allclose(result1, q)
+        assert np.allclose(result2, q)
+
+    def test_quaternion_associativity(self):
+        """Test de l'associativité (approximative)"""
+        q1 = np.array([1, 2, 3, 4])
+        q2 = np.array([2, 3, 4, 5])
+        q3 = np.array([3, 4, 5, 6])
+
+        left = quaternion_multiply(quaternion_multiply(q1, q2), q3)
+        right = quaternion_multiply(q1, quaternion_multiply(q2, q3))
+
+        # Les quaternions sont associatifs
+        assert np.allclose(left, right)
+
+
+def test_synchronization_quaternion_functions():
+    """Test des fonctions quaternioniques de synchronisation"""
+    from src.synchronization import QuaternionicSynchronization
+    from src.primatron import PrimatonNetwork
+
+    network = PrimatonNetwork(n_nodes=10)
+    sync = QuaternionicSynchronization(network)
+
+    # Test de quaternion_sine avec petite valeur
+    q_small = np.array([0.1, 0.0, 0.0, 0.0])
+    result = sync.quaternion_sine(q_small)
+    # Pour les petites valeurs, sin(q) ≈ q
+    assert np.allclose(result, q_small, atol=0.1)
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
