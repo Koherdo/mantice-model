@@ -7,28 +7,35 @@ import networkx as nx
 class PrimatonNetwork:
     """Spatially-embedded geometric network according to Definition II.2"""
 
-    def __init__(self, positions: np.ndarray = None, connectivity_radius: float = 0.1, 
-                 n_nodes: int = 1000, domain_size: Tuple[float, float, float] = (1.0, 1.0, 1.0)):
-        
+    def __init__(
+        self,
+        positions: np.ndarray = None,
+        connectivity_radius: float = 0.1,
+        n_nodes: int = 1000,
+        domain_size: Tuple[float, float, float] = (1.0, 1.0, 1.0),
+    ):
+
         if positions is None:
             # Générer des positions aléatoires si non fournies
             np.random.seed(42)
             positions = np.random.uniform(0, 1, (n_nodes, 3)) * np.array(domain_size)
-        
+
         self.positions = positions
         self.n_nodes = len(positions)
         self.r_c = connectivity_radius
         self.graph = nx.Graph()
         self.kd_tree = KDTree(positions)
-        
+
         # Stockage des calendriers (quaternions)
-        self.calendars = np.array([self._random_unit_quaternion() for _ in range(self.n_nodes)])
-        
+        self.calendars = np.array(
+            [self._random_unit_quaternion() for _ in range(self.n_nodes)]
+        )
+
         # Données géométriques
         self.direction_vectors = {}
         self.rotation_operators = {}
         self.distances = {}
-        
+
         self._build_network()
 
     def _random_unit_quaternion(self) -> np.ndarray:
@@ -115,13 +122,13 @@ class PrimatonNetwork:
     def get_geometric_data(self, i: int, j: int) -> dict:
         """Retourne les données géométriques pour l'arête (i,j)"""
         key = (i, j) if (i, j) in self.rotation_operators else (j, i)
-        
+
         if key in self.rotation_operators:
             return {
-                'distance': self.distances[key],
-                'direction': self.direction_vectors[key],
-                'angle': np.pi * np.exp(-self.distances[key] / (self.r_c / 3)),
-                'rotation_operator': self.rotation_operators[key]
+                "distance": self.distances[key],
+                "direction": self.direction_vectors[key],
+                "angle": np.pi * np.exp(-self.distances[key] / (self.r_c / 3)),
+                "rotation_operator": self.rotation_operators[key],
             }
         return {}
 
@@ -139,12 +146,12 @@ def quaternion_multiply(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
     """Multiplication de quaternions"""
     w1, x1, y1, z1 = q1
     w2, x2, y2, z2 = q2
-    
-    w = w1*w2 - x1*x2 - y1*y2 - z1*z2
-    x = w1*x2 + x1*w2 + y1*z2 - z1*y2
-    y = w1*y2 - x1*z2 + y1*w2 + z1*x2
-    z = w1*z2 + x1*y2 - y1*x2 + z1*w2
-    
+
+    w = w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2
+    x = w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2
+    y = w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2
+    z = w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2
+
     return np.array([w, x, y, z])
 
 
