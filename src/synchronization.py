@@ -1,138 +1,161 @@
 import numpy as np
-from typing import List, Callable
-from .quaternions import Quaternion, quaternion_sin
-from .primatron import Primaton
+import math  # AJOUT IMPORT
+from typing import List, Dict, Tuple
+from .primatron import (
+    PrimatonNetwork,
+    quaternion_multiply,
+    quaternion_conjugate,
+    quaternion_norm,
+)
 
 
 class QuaternionicSynchronization:
-    """Non-Abelian synchronization dynamics."""
+    """Système de synchronisation quaternionique selon les Équations 5-10"""
 
-    def __init__(self, primaton: Primaton, coupling_strength: float = 0.5):
-        self.primatron = primaton
+    def __init__(
+        self,
+        network: PrimatonNetwork,
+        coupling_strength: float = 0.5,
+        noise_intensity: float = 0.01,
+        intrinsic_freq_scale: float = 1.0,
+    ):
+        self.network = network
         self.sigma = coupling_strength
-        self.n_nodes = primaton.n_nodes
+        self.D = noise_intensity
+        self.omega_scale = intrinsic_freq_scale
 
-        # Initialize calendars with random states
-        self.calendars = self._initialize_calendars()
+        # Fréquences intrinsèques aléatoires
+        self.intrinsic_frequencies = self._initialize_intrinsic_frequencies()
 
-        # Intrinsic frequencies (quaternionic)
-        self.omega = self._initialize_frequencies()
+        # Historique pour l'analyse
+        self.history = {"calendars": [], "order_parameter": [], "time": []}
 
-        # Noise parameters
-        self.noise_strength = 0.1
-        self.noise_correlation = 0.0
+    def _initialize_intrinsic_frequencies(self) -> np.ndarray:
+        """Initialise les fréquences intrinsèques selon une distribution gaussienne"""
+        n_nodes = self.network.n_nodes
+        return np.random.normal(0, self.omega_scale, (n_nodes, 4))
 
-    def _initialize_calendars(self) -> List[Quaternion]:
-        """Initialize quaternionic calendars with random states."""
-        calendars = []
-        for _ in range(self.n_nodes):
-            # Random unit quaternion
-            random_vec = np.random.normal(0, 1, 4)
-            random_vec = random_vec / np.linalg.norm(random_vec)
-            calendars.append(Quaternion(*random_vec))
-        return calendars
+    def quaternion_sine(self, q: np.ndarray, n_terms: int = 3) -> np.ndarray:
+        """Sinus quaternionique selon l'Équation 10 (approximation par série)"""
+        # Pour les petites valeurs, on approxime sin(q) ≈ q
+        if quaternion_norm(q) < 0.1:
+            return q
 
-    def _initialize_frequencies(self) -> List[Quaternion]:
-        """Initialize intrinsic quaternionic frequencies."""
-        frequencies = []
-        for _ in range(self.n_nodes):
-            # Small random frequencies
-            freq_vec = np.random.normal(0, 0.1, 4)
-            frequencies.append(Quaternion(*freq_vec))
-        return frequencies
+        # Approximation avec quelques termes de la série
+        result = q.copy()
+        q_power = q.copy()
 
-    def coupling_function(self, i: int, j: int) -> Quaternion:
-        """Non-Abelian coupling function F(C_j, C_i, r_ij)."""
-        C_i = self.calendars[i]
-        C_j = self.calendars[j]
+        for n in range(1, n_terms):
+            # q^(2n+1)
+            for _ in range(2):
+                q_power = quaternion_multiply(q_power, q)
 
-        # Get rotation operator for this edge
-        R_ij = self.primatron.rotation_operators[(i, j)]
-        R_inv = R_ij.inverse()
+            # CORRECTION : Utiliser math.factorial
+            term = ((-1) ** n / math.factorial(2 * n + 1)) * q_power
+            result = result + term
 
-        # Quaternionic sine of difference
-        delta_C = C_j - C_i
-        sin_delta = quaternion_sin(delta_C)
+        return result
 
-        # Apply rotation: R·sin(C_j - C_i)·R^{-1}
-        coupled = R_ij * sin_delta * R_inv
+    def non_abelian_coupling(
+        self, q_i: np.ndarray, q_j: np.ndarray, geometric_data: dict
+    ) -> np.ndarray:
+        """Fonction de couplage non-abélienne selon l'Équation 6"""
+        if not geometric_data:
+            return np.zeros(4)
 
-        return coupled
+        # Différence des calendriers
+        delta_q = q_j - q_i
 
-    def dynamics_rhs(self, t: float, calendars_array: np.ndarray) -> np.ndarray:
-        """Right-hand side of synchronization dynamics."""
-        # Convert array back to quaternions
-        self._array_to_calendars(calendars_array)
+        # Sinus quaternionique de la différence
+        sin_delta = self.quaternion_sine(delta_q)
 
-        derivatives = []
+        # Opérateur de rotation
+        R = geometric_data["rotation_operator"]
+        R_inv = quaternion_conjugate(
+            R
+        )  # Inverse = conjugué pour les quaternions unitaires
 
-        for i in range(self.n_nodes):
-            # Intrinsic dynamics
-            derivative = self.omega[i]
+        # Application de la rotation: R · sin(Δ) · R^{-1}
+        temp = quaternion_multiply(R, sin_delta)
+        result = quaternion_multiply(temp, R_inv)
 
-            # Coupling term
-            neighbors = self.primatron.get_neighbors(i)
-            k_i = len(neighbors)
+        return result
 
-            if k_i > 0:
-                coupling_sum = Quaternion(0, 0, 0, 0)
-                for j in neighbors:
-                    coupling_sum = coupling_sum + self.coupling_function(i, j)
+    def compute_derivative(self, calendars: np.ndarray, time: float) -> np.ndarray:
+        """Calcule la dérivée selon l'Équation 5"""
+        n_nodes = self.network.n_nodes
+        derivatives = np.zeros((n_nodes, 4))
 
-                coupling_term = Quaternion(
-                    self.sigma * coupling_sum.w / k_i,
-                    self.sigma * coupling_sum.x / k_i,
-                    self.sigma * coupling_sum.y / k_i,
-                    self.sigma * coupling_sum.z / k_i,
+        for i in range(n_nodes):
+            # Terme de fréquence intrinsèque
+            derivatives[i] += self.intrinsic_frequencies[i]
+
+            # Terme de couplage avec les voisins
+            neighbors = self.network.get_neighbors(i)
+            k_i = len(neighbors) if neighbors else 1  # Éviter division par zéro
+
+            coupling_sum = np.zeros(4)
+            for j in neighbors:
+                geometric_data = self.network.get_geometric_data(i, j)
+                coupling_term = self.non_abelian_coupling(
+                    calendars[i], calendars[j], geometric_data
                 )
-                derivative = derivative + coupling_term
+                coupling_sum += coupling_term
 
-            # Add noise
-            noise = np.random.normal(0, self.noise_strength, 4)
-            derivative = derivative + Quaternion(*noise)
+            derivatives[i] += (self.sigma / k_i) * coupling_sum
 
-            derivatives.extend([derivative.w, derivative.x, derivative.y, derivative.z])
+            # Bruit quaternionique (Éq. 5)
+            noise = np.random.normal(0, np.sqrt(2 * self.D), 4)
+            derivatives[i] += noise
 
-        return np.array(derivatives)
+        return derivatives
 
-    def _calendars_to_array(self) -> np.ndarray:
-        """Convert calendars to flat array for ODE solver."""
-        array = []
-        for cal in self.calendars:
-            array.extend([cal.w, cal.x, cal.y, cal.z])
-        return np.array(array)
+    def rk4_integration(
+        self, calendars: np.ndarray, dt: float, time: float
+    ) -> np.ndarray:
+        """Intégration RK4 adaptée aux quaternions"""
+        k1 = self.compute_derivative(calendars, time)
+        k2 = self.compute_derivative(calendars + 0.5 * dt * k1, time + 0.5 * dt)
+        k3 = self.compute_derivative(calendars + 0.5 * dt * k2, time + 0.5 * dt)
+        k4 = self.compute_derivative(calendars + dt * k3, time + dt)
 
-    def _array_to_calendars(self, array: np.ndarray):
-        """Convert flat array back to quaternions."""
-        for i in range(self.n_nodes):
-            idx = i * 4
-            self.calendars[i] = Quaternion(*array[idx : idx + 4])
+        new_calendars = calendars + (dt / 6) * (k1 + 2 * k2 + 2 * k3 + k4)
 
-    def step_rk4(self, dt: float):
-        """Perform one RK4 time step."""
-        current_state = self._calendars_to_array()
+        # Normalisation pour maintenir les quaternions unitaires
+        for i in range(len(new_calendars)):
+            norm = quaternion_norm(new_calendars[i])
+            if norm > 1e-10:
+                new_calendars[i] /= norm
 
-        k1 = self.dynamics_rhs(0, current_state)
-        k2 = self.dynamics_rhs(dt / 2, current_state + dt * k1 / 2)
-        k3 = self.dynamics_rhs(dt / 2, current_state + dt * k2 / 2)
-        k4 = self.dynamics_rhs(dt, current_state + dt * k3)
+        return new_calendars
 
-        new_state = current_state + dt * (k1 + 2 * k2 + 2 * k3 + k4) / 6
-        self._array_to_calendars(new_state)
+    def compute_order_parameter(self, calendars: np.ndarray) -> float:
+        """Calcule le paramètre d'ordre global selon l'Équation 18"""
+        # Extraire la partie scalaire moyenne
+        scalar_parts = calendars[:, 0]  # Composante w
+        complex_phases = np.exp(1j * scalar_parts)
+        R = np.abs(np.mean(complex_phases))
+        return R
 
-    def get_coherence_matrix(self) -> np.ndarray:
-        """Compute pairwise coherence matrix."""
-        coherence = np.zeros((self.n_nodes, self.n_nodes))
-        for i in range(self.n_nodes):
-            for j in range(self.n_nodes):
-                if i != j:
-                    diff = self.calendars[i] - self.calendars[j]
-                    coherence[i, j] = diff.norm()
-        return coherence
+    def evolve(self, timesteps: int = 1000, dt: float = 0.01) -> Dict:
+        """Évolue le système dans le temps"""
+        current_calendars = self.network.calendars.copy()
+        time = 0.0
 
-    def get_global_order_parameter(self) -> float:
-        """Compute global order parameter R."""
-        # Extract scalar parts for order parameter calculation
-        scalar_parts = [cal.w for cal in self.calendars]
-        complex_phases = [np.exp(1j * phase) for phase in scalar_parts]
-        return np.abs(np.mean(complex_phases))
+        for step in range(timesteps):
+            # Intégration RK4
+            current_calendars = self.rk4_integration(current_calendars, dt, time)
+
+            # Mise à jour du réseau
+            self.network.update_calendars(current_calendars)
+
+            # Enregistrement périodique
+            if step % 100 == 0:
+                R = self.compute_order_parameter(current_calendars)
+                self.history["calendars"].append(current_calendars.copy())
+                self.history["order_parameter"].append(R)
+                self.history["time"].append(time)
+
+            time += dt
+
+        return self.history

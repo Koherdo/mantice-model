@@ -1,230 +1,161 @@
 import numpy as np
+from typing import List, Set, Dict, Tuple
+from collections import defaultdict
 import networkx as nx
-from typing import List, Set, Tuple
-
-from src.quaternions import Quaternion
-from .primatron import Primaton
-from .synchronization import QuaternionicSynchronization
-from collections import deque
-
-
-class UnionFind:
-    """Union-Find data structure with path compression and union-by-rank."""
-
-    def __init__(self, n: int):
-        self.parent = list(range(n))
-        self.rank = [0] * n
-
-    def find(self, x: int) -> int:
-        if self.parent[x] != x:
-            self.parent[x] = self.find(self.parent[x])  # Path compression
-        return self.parent[x]
-
-    def union(self, x: int, y: int):
-        px, py = self.find(x), self.find(y)
-        if px == py:
-            return
-
-        # Union by rank
-        if self.rank[px] < self.rank[py]:
-            self.parent[px] = py
-        elif self.rank[px] > self.rank[py]:
-            self.parent[py] = px
-        else:
-            self.parent[py] = px
-            self.rank[px] += 1
+from .primatron import PrimatonNetwork, quaternion_norm
 
 
 class ManticeDetector:
-    """Robust Mantice detection algorithm."""
+    """Détecteur de Mantices selon l'Algorithme 1 et Définition II.8"""
 
-    def __init__(self, primaton: Primaton, coherence_threshold: float = 0.15):
-        self.primatron = primaton
+    def __init__(self, coherence_threshold: float = 0.15, min_duration: int = 10):
         self.epsilon = coherence_threshold
+        self.min_duration = min_duration
+        self.union_find = None
 
-    def find_bridges(self, graph: nx.Graph) -> List[Tuple[int, int]]:
-        """Find bridge edges using Tarjan's algorithm."""
-        if not graph.edges():
-            return []
-
-        # Convert to networkx graph for bridge detection
-        nx_graph = nx.Graph()
-        nx_graph.add_edges_from(graph.edges())
-
-        return list(nx.bridges(nx_graph))
-
-    def detect_mantices(
-        self, synchronization: QuaternionicSynchronization, time_window: int = 10
-    ) -> List[Set[int]]:
-        """Main Mantice detection algorithm."""
-
-        # Step 1: Compute time-averaged distance matrix
-        distance_matrix = self._compute_time_averaged_distances(
-            synchronization, time_window
-        )
-
-        # Step 2: Union-Find clustering
-        uf = self._union_find_clustering(distance_matrix)
-
-        # Step 3: Extract connected components
-        components = self._extract_components(uf)
-
-        # Step 4: Spatial connectivity verification
-        mantices = self._verify_spatial_connectivity(components)
-
-        # Step 5: Temporal stability check
-        mantices = self._temporal_stability_check(mantices, synchronization)
-
-        return mantices
-
-    def _compute_time_averaged_distances(
-        self, synchronization: QuaternionicSynchronization, time_window: int
-    ) -> np.ndarray:
-        """Compute time-averaged quaternionic distance matrix."""
-        n_nodes = self.primatron.n_nodes
+    def compute_distance_matrix(self, calendars: np.ndarray) -> np.ndarray:
+        """Calcule la matrice de distance quaternionique"""
+        n_nodes = len(calendars)
         distance_matrix = np.zeros((n_nodes, n_nodes))
 
-        # Sample multiple time points (simplified)
-        for _ in range(time_window):
-            coherence = synchronization.get_coherence_matrix()
-            distance_matrix += coherence
-
-        return distance_matrix / time_window
-
-    def _union_find_clustering(self, distance_matrix: np.ndarray) -> UnionFind:
-        """Perform Union-Find clustering based on coherence."""
-        n_nodes = self.primatron.n_nodes
-        uf = UnionFind(n_nodes)
-
-        # Get edges sorted by coherence
-        edges = []
         for i in range(n_nodes):
             for j in range(i + 1, n_nodes):
-                if distance_matrix[i, j] < self.epsilon:
-                    edges.append((distance_matrix[i, j], i, j))
+                dist = self.quaternion_distance(calendars[i], calendars[j])
+                distance_matrix[i, j] = dist
+                distance_matrix[j, i] = dist
 
-        # Sort by coherence (ascending - more coherent first)
-        edges.sort()
+        return distance_matrix
 
-        # Union nodes based on coherence
-        for dist, i, j in edges:
-            if distance_matrix[i, j] < self.epsilon:
-                uf.union(i, j)
+    def quaternion_distance(self, q1: np.ndarray, q2: np.ndarray) -> float:
+        """Distance entre deux quaternions"""
+        diff = q1 - q2
+        return np.sqrt(np.sum(diff**2))
 
-        return uf
+    def initialize_union_find(self, n_nodes: int):
+        """Initialise la structure Union-Find"""
+        self.union_find = list(range(n_nodes))
 
-    def _extract_components(self, uf: UnionFind) -> List[Set[int]]:
-        """Extract connected components from Union-Find."""
-        components = {}
-        for i in range(self.primatron.n_nodes):
-            root = uf.find(i)
-            if root not in components:
-                components[root] = set()
+    def find(self, x: int) -> int:
+        """Trouve la racine avec compression de chemin"""
+        if self.union_find[x] != x:
+            self.union_find[x] = self.find(self.union_find[x])
+        return self.union_find[x]
+
+    def union(self, x: int, y: int):
+        """Union de deux ensembles"""
+        root_x = self.find(x)
+        root_y = self.find(y)
+        if root_x != root_y:
+            self.union_find[root_y] = root_x
+
+    def detect_mantices(
+        self, network: PrimatonNetwork, calendars: np.ndarray
+    ) -> List[Set[int]]:
+        """Détecte les Mantices selon l'Algorithme 1"""
+        n_nodes = network.n_nodes
+
+        # Étape 1: Matrice de distance
+        distance_matrix = self.compute_distance_matrix(calendars)
+
+        # Étape 2: Initialisation Union-Find
+        self.initialize_union_find(n_nodes)
+
+        # Étape 3: Union des nœuds cohérents
+        edges = []
+        for i in range(n_nodes):
+            for j in network.get_neighbors(i):
+                if j > i and distance_matrix[i, j] < self.epsilon:
+                    edges.append((i, j, distance_matrix[i, j]))
+
+        # Trier par distance croissante
+        edges.sort(key=lambda x: x[2])
+
+        # Appliquer les unions
+        for i, j, dist in edges:
+            if self.find(i) != self.find(j):
+                self.union(i, j)
+
+        # Étape 4: Extraction des composantes connexes
+        components = defaultdict(set)
+        for i in range(n_nodes):
+            root = self.find(i)
             components[root].add(i)
 
-        return list(components.values())
+        mantices = list(components.values())
 
-    def _verify_spatial_connectivity(
-        self, components: List[Set[int]]
-    ) -> List[Set[int]]:
-        """Verify spatial connectivity of components."""
-        mantices = []
-
-        for component in components:
-            if len(component) == 1:
-                mantices.append(component)
-                continue
-
-            # Create subgraph for this component
-            subgraph = self.primatron.graph.subgraph(component)
-
-            if nx.is_connected(subgraph):
-                mantices.append(component)
-            else:
-                # Find and cut weakest bridges
-                connected_subcomponents = self._handle_disconnected_component(
-                    subgraph, component
-                )
-                mantices.extend(connected_subcomponents)
-
-        return mantices
-
-    def _handle_disconnected_component(
-        self, subgraph: nx.Graph, component: Set[int]
-    ) -> List[Set[int]]:
-        """Handle disconnected components by cutting weakest bridges."""
-        bridges = self.find_bridges(subgraph)
-
-        if not bridges:
-            # No bridges found, return original connected components
-            return [set(cc) for cc in nx.connected_components(subgraph)]
-
-        # Find weakest bridge based on spatial distance
-        weakest_bridge = min(
-            bridges, key=lambda e: self.primatron.distances.get(e, float("inf"))
-        )
-
-        # Remove weakest bridge and get new components
-        subgraph.remove_edge(*weakest_bridge)
-        return [set(cc) for cc in nx.connected_components(subgraph)]
-
-    def _temporal_stability_check(
-        self, mantices: List[Set[int]], synchronization: QuaternionicSynchronization
-    ) -> List[Set[int]]:
-        """Check temporal stability of Mantices."""
-        stable_mantices = []
-
+        # Étape 5: Vérification de la connectivité spatiale
+        verified_mantices = []
         for mantice in mantices:
-            if len(mantice) < 2:
-                stable_mantices.append(mantice)
-                continue
+            if self._check_spatial_connectivity(mantice, network):
+                verified_mantices.append(mantice)
 
-            # Compute mean calendar for this Mantice
-            mean_calendar = self._compute_mean_calendar(mantice, synchronization)
+        return verified_mantices
 
-            # Check stability of each node
-            stable_nodes = set()
-            for node in mantice:
-                node_calendar = synchronization.calendars[node]
-                distance = (node_calendar - mean_calendar).norm()
+    def _check_spatial_connectivity(
+        self, mantice: Set[int], network: PrimatonNetwork
+    ) -> bool:
+        """Vérifie la connectivité spatiale du sous-graphe induit"""
+        if len(mantice) <= 1:
+            return True
 
-                if distance <= 1.5 * self.epsilon:
-                    stable_nodes.add(node)
+        # Créer le sous-graphe
+        subgraph_edges = []
+        nodes_list = list(mantice)
 
-            if len(stable_nodes) >= 2:  # Minimum size for Mantice
-                stable_mantices.append(stable_nodes)
+        for i in range(len(nodes_list)):
+            for j in range(i + 1, len(nodes_list)):
+                node_i, node_j = nodes_list[i], nodes_list[j]
+                if node_j in network.get_neighbors(node_i):
+                    subgraph_edges.append((node_i, node_j))
 
-        return stable_mantices
+        # Vérifier la connectivité avec NetworkX
+        G = nx.Graph()
+        G.add_nodes_from(nodes_list)
+        G.add_edges_from(subgraph_edges)
 
-    def _compute_mean_calendar(
-        self, mantice: Set[int], synchronization: QuaternionicSynchronization
-    ) -> "Quaternion":
-        """Compute mean quaternionic calendar for a Mantice."""
-        from .quaternions import Quaternion
+        return nx.is_connected(G)
 
-        sum_w, sum_x, sum_y, sum_z = 0, 0, 0, 0
-        for node in mantice:
-            cal = synchronization.calendars[node]
-            sum_w += cal.w
-            sum_x += cal.x
-            sum_y += cal.y
-            sum_z += cal.z
-
-        n = len(mantice)
-        return Quaternion(sum_w / n, sum_x / n, sum_y / n, sum_z / n).normalize()
-
-    def get_mantice_statistics(self, mantices: List[Set[int]]) -> dict:
-        """Compute statistics for detected Mantices."""
+    def compute_mantice_statistics(
+        self, mantices: List[Set[int]], network: PrimatonNetwork
+    ) -> Dict:
+        """Calcule les statistiques des Mantices selon la Proposition II.11"""
         if not mantices:
             return {}
 
-        sizes = [len(m) for m in mantices]
+        sizes = [len(mantice) for mantice in mantices]
 
-        return {
+        statistics = {
             "number": len(mantices),
             "mean_size": np.mean(sizes),
-            "size_std": np.std(sizes),
             "size_distribution": sizes,
-            "largest_size": max(sizes),
-            "smallest_size": min(sizes),
+            "largest_mantice": max(sizes) if sizes else 0,
+            "total_nodes_in_mantices": sum(sizes),
         }
+
+        return statistics
+
+
+def analyze_mantice_evolution(
+    history: Dict, network: PrimatonNetwork, detector: ManticeDetector
+) -> Dict:
+    """Analyse l'évolution des Mantices dans le temps"""
+    time_points = history["time"]
+    calendars_history = history["calendars"]
+
+    evolution_data = {
+        "time": time_points,
+        "mantice_count": [],
+        "mean_mantice_size": [],
+        "largest_mantice": [],
+        "order_parameter": history["order_parameter"],
+    }
+
+    for i, calendars in enumerate(calendars_history):
+        mantices = detector.detect_mantices(network, calendars)
+        stats = detector.compute_mantice_statistics(mantices, network)
+
+        evolution_data["mantice_count"].append(stats.get("number", 0))
+        evolution_data["mean_mantice_size"].append(stats.get("mean_size", 0))
+        evolution_data["largest_mantice"].append(stats.get("largest_mantice", 0))
+
+    return evolution_data
